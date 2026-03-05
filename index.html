@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>储物柜破坏者 - 游戏与推理辅助 (完美策略版)</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            user-select: none;
+        }
+        * { box-sizing: border-box; }
+
+        .header { display: flex; align-items: center; gap: 20px; margin-bottom: 10px; }
+        .mode-toggle {
+            padding: 10px 20px; background-color: #ff6600; color: white; border: none;
+            border-radius: 8px; font-size: 1.1rem; cursor: pointer; font-weight: bold;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3); transition: 0.2s;
+        }
+        .mode-toggle:hover { background-color: #ff8533; }
+        
+        .rule-selector {
+            display: flex; gap: 15px; background: rgba(11, 25, 48, 0.8); padding: 10px 20px;
+            border-radius: 8px; margin-bottom: 15px; border: 1px solid #1a365d;
+            align-items: center; font-size: 0.95rem; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        .rule-label { color: #64ffda; font-weight: bold; letter-spacing: 1px;}
+        .rule-option { cursor: pointer; display: flex; align-items: center; gap: 5px; color: #ddd; transition: 0.2s; }
+        .rule-option:hover { color: #fff; }
+        .rule-option input { cursor: pointer; accent-color: #64ffda; transform: scale(1.2); }
+
+        .game-container {
+            background-color: rgba(0, 0, 0, 0.6); border-radius: 15px; padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; gap: 20px;
+            max-width: 950px; width: 100%; min-height: 520px;
+        }
+
+        .history-panel {
+            flex: 1; background-color: #0b1930; border: 2px solid #1a365d; border-radius: 10px;
+            padding: 15px; display: flex; flex-direction: column; overflow: hidden;
+        }
+        .history-title { text-align: right; border-bottom: 1px solid #1a365d; padding-bottom: 10px; margin-bottom: 10px; font-weight: bold; }
+        .history-list { flex-grow: 1; overflow-y: auto; display: flex; flex-direction: column; }
+        .history-item {
+            display: flex; flex-direction: column; align-items: center; margin-bottom: 15px;
+            background-color: #112240; padding: 10px; border-radius: 5px; flex-shrink: 0; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        .history-feedback, .history-numbers { display: flex; gap: 15px; }
+        .history-numbers span { font-size: 1.2rem; width: 20px; text-align: center; font-family: monospace; font-weight: bold; }
+
+        .lock-panel {
+            flex: 1.5; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: linear-gradient(180deg, #6e7275 0%, #44484b 100%); border: 4px solid #2a2a2a;
+            border-radius: 15px; padding: 20px; box-shadow: inset 0 0 15px rgba(255,255,255,0.1), 0 10px 20px rgba(0,0,0,0.8);
+            position: relative;
+        }
+
+        .fast-input-container { display: none; flex-direction: column; align-items: center; margin-bottom: 15px; width: 100%; }
+        .fast-input-container label { color: #64ffda; margin-bottom: 5px; font-size: 0.9rem; font-weight: bold; text-shadow: 0 0 5px rgba(0,0,0,0.8); }
+        .fast-input {
+            width: 160px; padding: 8px; font-size: 1.5rem; text-align: center; letter-spacing: 8px;
+            border-radius: 8px; border: 2px solid #222; background: #111; color: #64ffda;
+            font-family: monospace; outline: none; transition: 0.2s; box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+        }
+
+        .lock-housing {
+            position: relative; padding: 20px; background: rgba(0, 0, 0, 0.4);
+            border-radius: 10px; border: 2px solid #1a1a1a; box-shadow: inset 0 5px 15px rgba(0,0,0,0.8);
+        }
+
+        .selection-frame {
+            position: absolute; top: 102px; left: 10px; right: 10px; height: 44px;
+            border: 2px solid rgba(255, 102, 0, 0.85); border-radius: 6px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 40%, rgba(255,255,255,0.05) 100%);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.6), inset 0 1px 3px rgba(255, 255, 255, 0.4), inset 0 -1px 3px rgba(0, 0, 0, 0.5);
+            pointer-events: none; z-index: 10; backdrop-filter: brightness(1.2) contrast(1.1);
+        }
+        .selection-frame::before, .selection-frame::after {
+            content: ''; position: absolute; top: 50%; transform: translateY(-50%);
+            width: 8px; height: 16px; background: linear-gradient(90deg, #444, #777, #444);
+            border: 1px solid #111; border-radius: 2px; box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        .selection-frame::before { left: -6px; }
+        .selection-frame::after { right: -6px; }
+
+        .dials { display: flex; gap: 20px; position: relative; z-index: 1; }
+        .dial-column { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 52px; }
+
+        .arrow-btn {
+            background: linear-gradient(180deg, #4a4a4a 0%, #2a2a2a 100%); color: #ff5500; 
+            border: 2px solid #111; border-radius: 5px; width: 44px; height: 34px; font-size: 1.2rem; cursor: pointer;
+            display: flex; justify-content: center; align-items: center;
+            box-shadow: inset 0 1px 2px rgba(255,255,255,0.2), 0 3px 5px rgba(0,0,0,0.6); transition: 0.1s;
+        }
+        .arrow-btn:active { transform: translateY(2px); box-shadow: inset 0 2px 4px rgba(0,0,0,0.8), 0 1px 2px rgba(0,0,0,0.6); }
+        
+        .number-window {
+            height: 120px; width: 52px; background-color: #0c0c0c; border-radius: 4px; border: 2px solid #000;
+            box-shadow: inset 0 30px 20px -10px rgba(0,0,0,0.95), inset 0 -30px 20px -10px rgba(0,0,0,0.95), 0 2px 5px rgba(255,255,255,0.1);
+            display: flex; justify-content: center; overflow: hidden; position: relative;
+        }
+        .dial-strip { position: absolute; top: 0; width: 100%; transform: translateY(-40px); }
+        .num {
+            height: 40px; line-height: 40px; text-align: center; font-size: 2.2rem;
+            color: #e0e0e0; font-family: 'Courier New', Courier, monospace; font-weight: bold; text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+        }
+
+        .color-pickers-row { display: none; gap: 20px; margin-top: 15px; justify-content: center; }
+        .color-picker-wrapper { width: 52px; display: flex; justify-content: center; }
+        .color-picker {
+            font-size: 1.5rem; cursor: pointer; background: #222; padding: 5px; border-radius: 5px; border: 1px solid #000;
+            width: 34px; text-align: center; box-shadow: inset 0 2px 5px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.4); transition: 0.1s;
+        }
+        .color-picker:active { transform: scale(0.9); }
+        
+        .control-panel {
+            flex: 1.2; display: flex; flex-direction: column; background-color: #0b1930;
+            border: 2px solid #1a365d; border-radius: 10px; padding: 15px; overflow: hidden; box-shadow: inset 0 0 20px rgba(0,0,0,0.3);
+        }
+        .panel-content { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 20px; }
+        .attempts-left { font-size: 1.2rem; font-weight: bold; }
+        .lock-btn {
+            background: linear-gradient(180deg, #00d2ff 0%, #3a7bd5 100%); border: none; border-radius: 50%; width: 100px; height: 100px;
+            color: white; font-size: 1.5rem; font-weight: bold; cursor: pointer; box-shadow: 0 5px 15px rgba(0,0,0,0.4), inset 0 2px 5px rgba(255,255,255,0.5); transition: 0.1s;
+        }
+        .lock-btn:hover { transform: scale(1.05); }
+        .lock-btn:active { transform: scale(0.95); box-shadow: 0 2px 5px rgba(0,0,0,0.4); }
+        .lock-btn:disabled { background: #555; color: #888; cursor: not-allowed; transform: none; box-shadow: none; }
+        
+        .message { margin-top: 15px; font-size: 1.1rem; text-align: center; min-height: 30px; color: #ffcc00; text-shadow: 0 1px 2px #000; }
+        .btn-general { padding: 10px 20px; background-color: #ffcc00; color: #000; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; margin-top: 10px; box-shadow: 0 3px 5px rgba(0,0,0,0.3); }
+
+        .reasoning-log { flex-grow: 1; width: 100%; background: #0d1b2a; border-radius: 5px; padding: 15px; overflow-y: auto; font-size: 0.95rem; line-height: 1.6; color: #a8b2d1; border: 1px solid #1a365d; box-sizing: border-box; }
+        .reasoning-log strong { color: #64ffda; font-size: 1.1rem; }
+        .reasoning-log .highlight { color: #ffcc00; }
+        .reasoning-log .minimax-tag { color: #ff6600; font-weight: bold; text-shadow: 0 0 5px rgba(255,102,0,0.4);}
+        .reasoning-controls { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+        .btn-group-row { display: flex; gap: 10px; width: 100%; }
+        .btn-group-row .btn-general { flex: 1; margin-top: 0; padding: 10px 5px; }
+
+        .badge-container { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; max-height: 180px; overflow-y: auto; padding: 8px; background: rgba(0,0,0,0.4); border-radius: 5px; border: 1px solid #1a365d; }
+        .code-badge { display: inline-block; background: #112240; color: #64ffda; border: 1px solid #64ffda; padding: 4px 8px; border-radius: 4px; font-family: monospace; font-size: 1.1rem; cursor: pointer; transition: 0.2s; }
+        .code-badge:hover { background: #64ffda; color: #000; transform: scale(1.05); }
+        
+        .badge-container::-webkit-scrollbar, .history-list::-webkit-scrollbar, .reasoning-log::-webkit-scrollbar { width: 6px; }
+        .badge-container::-webkit-scrollbar-track, .history-list::-webkit-scrollbar-track, .reasoning-log::-webkit-scrollbar-track { background: #0b1930; }
+        .badge-container::-webkit-scrollbar-thumb, .history-list::-webkit-scrollbar-thumb, .reasoning-log::-webkit-scrollbar-thumb { background: #1a365d; border-radius: 3px; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1 id="mainTitle">当前模式：【游戏挑战】</h1>
+    <button class="mode-toggle" onclick="toggleMode()">切换至【推理辅助】</button>
+</div>
+
+<div class="rule-selector">
+    <span class="rule-label">⚙️ 判定规则：</span>
+    <label class="rule-option">
+        <input type="radio" name="gameRule" value="1" checked onchange="changeRule(1)">
+        <span>规则1：黄灯独立判定 (当前游戏截图专属)</span>
+    </label>
+    <label class="rule-option">
+        <input type="radio" name="gameRule" value="2" onchange="changeRule(2)">
+        <span>规则2：严格互相消耗 (经典 Mastermind)</span>
+    </label>
+</div>
+
+<div class="game-container">
+    <div class="history-panel">
+        <div class="history-title">记录列表:</div>
+        <div class="history-list" id="historyList"></div>
+    </div>
+
+    <div class="lock-panel">
+        <div class="fast-input-container" id="fastInputContainer">
+            <label for="fastInput">快捷输入面板 (支持键盘)</label>
+            <input type="text" id="fastInput" class="fast-input" maxlength="4" placeholder="----" oninput="handleFastInput(event)" autocomplete="off">
+        </div>
+
+        <div class="lock-housing">
+            <div class="selection-frame"></div>
+            <div class="dials">
+                <div class="dial-column">
+                    <div class="arrow-btn" onclick="changeDigit(0, -1)">▲</div>
+                    <div class="number-window">
+                        <div class="dial-strip" id="strip-0">
+                            <div class="num" id="strip-0-2"></div>
+                            <div class="num" id="strip-0-1"></div>
+                            <div class="num" id="strip-0-0"></div>
+                            <div class="num" id="strip-0--1"></div>
+                            <div class="num" id="strip-0--2"></div>
+                        </div>
+                    </div>
+                    <div class="arrow-btn" onclick="changeDigit(0, 1)">▼</div>
+                </div>
+                <div class="dial-column">
+                    <div class="arrow-btn" onclick="changeDigit(1, -1)">▲</div>
+                    <div class="number-window">
+                        <div class="dial-strip" id="strip-1">
+                            <div class="num" id="strip-1-2"></div>
+                            <div class="num" id="strip-1-1"></div>
+                            <div class="num" id="strip-1-0"></div>
+                            <div class="num" id="strip-1--1"></div>
+                            <div class="num" id="strip-1--2"></div>
+                        </div>
+                    </div>
+                    <div class="arrow-btn" onclick="changeDigit(1, 1)">▼</div>
+                </div>
+                <div class="dial-column">
+                    <div class="arrow-btn" onclick="changeDigit(2, -1)">▲</div>
+                    <div class="number-window">
+                        <div class="dial-strip" id="strip-2">
+                            <div class="num" id="strip-2-2"></div>
+                            <div class="num" id="strip-2-1"></div>
+                            <div class="num" id="strip-2-0"></div>
+                            <div class="num" id="strip-2--1"></div>
+                            <div class="num" id="strip-2--2"></div>
+                        </div>
+                    </div>
+                    <div class="arrow-btn" onclick="changeDigit(2, 1)">▼</div>
+                </div>
+                <div class="dial-column">
+                    <div class="arrow-btn" onclick="changeDigit(3, -1)">▲</div>
+                    <div class="number-window">
+                        <div class="dial-strip" id="strip-3">
+                            <div class="num" id="strip-3-2"></div>
+                            <div class="num" id="strip-3-1"></div>
+                            <div class="num" id="strip-3-0"></div>
+                            <div class="num" id="strip-3--1"></div>
+                            <div class="num" id="strip-3--2"></div>
+                        </div>
+                    </div>
+                    <div class="arrow-btn" onclick="changeDigit(3, 1)">▼</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="color-pickers-row" id="colorPickersRow">
+            <div class="color-picker-wrapper"><div class="color-picker" id="color-0" onclick="cycleColor(0)">🟥</div></div>
+            <div class="color-picker-wrapper"><div class="color-picker" id="color-1" onclick="cycleColor(1)">🟥</div></div>
+            <div class="color-picker-wrapper"><div class="color-picker" id="color-2" onclick="cycleColor(2)">🟥</div></div>
+            <div class="color-picker-wrapper"><div class="color-picker" id="color-3" onclick="cycleColor(3)">🟥</div></div>
+        </div>
+
+        <div class="message" id="messageBox"></div>
+        <button class="btn-general" id="restartBtn" style="display:none;" onclick="initGame()">重新开始</button>
+    </div>
+
+    <div class="control-panel" id="rightPanel">
+        <div class="panel-content" id="gameControls">
+            <div class="attempts-left" id="attemptsText">尝试次数：4</div>
+            <button class="lock-btn" id="lockBtn" onclick="submitGuess()">锁定</button>
+        </div>
+        <div class="panel-content" id="reasoningControls" style="display: none;">
+            <div style="text-align:center; color:#64ffda; font-weight:bold; letter-spacing: 2px;">Minimax 推理终端</div>
+            <div class="reasoning-log" id="reasoningLog">
+                核心计算模块已就绪。<br>
+                密码池总数：<strong class="highlight">10000</strong> 种。<br>
+                建议初始尝试：<strong style="cursor:pointer;" title="点击输入" onclick="autoFill('0123')">0123</strong> 或 <strong style="cursor:pointer;" title="点击输入" onclick="autoFill('0987')">0987</strong>
+            </div>
+            <div class="reasoning-controls">
+                <button class="btn-general" style="width:100%; background:#64ffda; margin-top:0;" onclick="addReasoningRecord()">录入线索并推演</button>
+                <div class="btn-group-row">
+                    <button class="btn-general" style="background:#3b82f6; color:white;" onclick="undoReasoningRecord()">撤回上一步</button>
+                    <button class="btn-general" style="background:#444; color:white;" onclick="initReasoningMode()">清空重置</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentRule = 1; 
+    const allPossibleCodes = [];
+    for (let i = 0; i < 10000; i++) {
+        allPossibleCodes.push(String(i).padStart(4, '0').split('').map(Number));
+    }
+
+    function changeRule(rule) {
+        currentRule = parseInt(rule);
+        initGame();
+        initReasoningMode();
+        
+        let ruleName = rule === 1 ? "【规则1：黄灯独立判定】" : "【规则2：严格互相消耗】";
+        if (currentMode === 'reasoning') {
+            document.getElementById('reasoningLog').innerHTML = `
+                🔄 已切换至 ${ruleName}，系统已重置。<br>
+                当前可能组合：<strong class="highlight">10000</strong> 种。<br>
+                👉 建议初始尝试：<strong style="cursor:pointer;" title="点击输入" onclick="autoFill('0123')">0123</strong> 或 <strong style="cursor:pointer;" title="点击输入" onclick="autoFill('0987')">0987</strong>
+            `;
+        }
+    }
+
+    function getFeedbackFast(sec, gue) {
+        if (currentRule === 1) return getFeedbackFastRule1(sec, gue);
+        else return getFeedbackFastRule2(sec, gue);
+    }
+
+    function getFeedbackFastRule1(sec, gue) {
+        let s0=sec[0], s1=sec[1], s2=sec[2], s3=sec[3];
+        let g0=gue[0], g1=gue[1], g2=gue[2], g3=gue[3];
+        let f0=0, f1=0, f2=0, f3=0; 
+        
+        if (g0===s0) { f0=2; s0=-1; g0=-2; }
+        if (g1===s1) { f1=2; s1=-1; g1=-2; }
+        if (g2===s2) { f2=2; s2=-1; g2=-2; }
+        if (g3===s3) { f3=2; s3=-1; g3=-2; }
+        
+        if (g0>=0 && (g0===s0 || g0===s1 || g0===s2 || g0===s3)) f0=1;
+        if (g1>=0 && (g1===s0 || g1===s1 || g1===s2 || g1===s3)) f1=1;
+        if (g2>=0 && (g2===s0 || g2===s1 || g2===s2 || g2===s3)) f2=1;
+        if (g3>=0 && (g3===s0 || g3===s1 || g3===s2 || g3===s3)) f3=1;
+        
+        return f0*27 + f1*9 + f2*3 + f3;
+    }
+
+    function getFeedbackFastRule2(sec, gue) {
+        let s0=sec[0], s1=sec[1], s2=sec[2], s3=sec[3];
+        let g0=gue[0], g1=gue[1], g2=gue[2], g3=gue[3];
+        let f0=0, f1=0, f2=0, f3=0; 
+        
+        if (g0===s0) { f0=2; s0=-1; g0=-2; }
+        if (g1===s1) { f1=2; s1=-1; g1=-2; }
+        if (g2===s2) { f2=2; s2=-1; g2=-2; }
+        if (g3===s3) { f3=2; s3=-1; g3=-2; }
+        
+        if (g0>=0) { if (g0===s1) { f0=1; s1=-1; } else if (g0===s2) { f0=1; s2=-1; } else if (g0===s3) { f0=1; s3=-1; } }
+        if (g1>=0) { if (g1===s0) { f1=1; s0=-1; } else if (g1===s2) { f1=1; s2=-1; } else if (g1===s3) { f1=1; s3=-1; } }
+        if (g2>=0) { if (g2===s0) { f2=1; s0=-1; } else if (g2===s1) { f2=1; s1=-1; } else if (g2===s3) { f2=1; s3=-1; } }
+        if (g3>=0) { if (g3===s0) { f3=1; s0=-1; } else if (g3===s1) { f3=1; s1=-1; } else if (g3===s2) { f3=1; s2=-1; } }
+        
+        return f0*27 + f1*9 + f2*3 + f3;
+    }
+
+    function colorsToInt(colors) {
+        const map = {'🟥':0, '🟨':1, '🟩':2};
+        return map[colors[0]]*27 + map[colors[1]]*9 + map[colors[2]]*3 + map[colors[3]];
+    }
+
+    function intToColors(fbInt) {
+        const map = ['🟥', '🟨', '🟩'];
+        return [
+            map[Math.floor(fbInt / 27) % 3],
+            map[Math.floor(fbInt / 9) % 3],
+            map[Math.floor(fbInt / 3) % 3],
+            map[fbInt % 3]
+        ];
+    }
+
+    function calculateMinimax(validCodes) {
+        if (validCodes.length === 1) return { code: validCodes[0], maxRemaining: 1 };
+        if (validCodes.length === 0) return null;
+        
+        let bestGuess = null;
+        let minWorstCase = Infinity;
+        let isBestGuessInPool = false;
+
+        const validDict = new Uint8Array(10000);
+        for(let i=0; i<validCodes.length; i++) {
+            let c = validCodes[i];
+            validDict[c[0]*1000 + c[1]*100 + c[2]*10 + c[3]] = 1;
+        }
+
+        for (let i = 0; i < allPossibleCodes.length; i++) {
+            let guess = allPossibleCodes[i];
+            let counts = new Int32Array(81);
+            let currentWorstCase = 0;
+            
+            for (let j = 0; j < validCodes.length; j++) {
+                let secret = validCodes[j];
+                let fbInt = getFeedbackFast(secret, guess);
+                counts[fbInt]++;
+                if (counts[fbInt] > currentWorstCase) {
+                    currentWorstCase = counts[fbInt];
+                }
+            }
+            
+            let isCurrentInPool = validDict[guess[0]*1000 + guess[1]*100 + guess[2]*10 + guess[3]] === 1;
+
+            if (currentWorstCase < minWorstCase) {
+                minWorstCase = currentWorstCase;
+                bestGuess = guess;
+                isBestGuessInPool = isCurrentInPool;
+            } else if (currentWorstCase === minWorstCase) {
+                if (!isBestGuessInPool && isCurrentInPool) {
+                    bestGuess = guess;
+                    isBestGuessInPool = true;
+                }
+            }
+        }
+        
+        return { code: bestGuess, maxRemaining: minWorstCase };
+    }
+
+    const MAX_ATTEMPTS = 4;
+    let currentMode = 'game'; 
+    let currentGuess = [0, 0, 0, 0];
+    let secretCode = [];
+    let attemptsLeft = MAX_ATTEMPTS;
+    let isGameOver = false;
+
+    let inputColors = ['🟥', '🟥', '🟥', '🟥'];
+    const colorCycle = ['🟥', '🟨', '🟩'];
+    
+    let currentValidCodes = []; 
+    let reasoningHistory = []; 
+
+    window.onload = () => {
+        currentValidCodes = [...allPossibleCodes];
+        initGame();
+    };
+
+    function toggleMode() {
+        const title = document.getElementById('mainTitle');
+        const toggleBtn = document.querySelector('.mode-toggle');
+        const colorPickersRow = document.getElementById('colorPickersRow');
+        const fastInputContainer = document.getElementById('fastInputContainer');
+        
+        if (currentMode === 'game') {
+            currentMode = 'reasoning';
+            title.innerText = '当前模式：【推理辅助】';
+            toggleBtn.innerText = '返回【游戏挑战】';
+            document.getElementById('gameControls').style.display = 'none';
+            document.getElementById('reasoningControls').style.display = 'flex';
+            colorPickersRow.style.display = 'flex'; 
+            fastInputContainer.style.display = 'flex';
+            initReasoningMode();
+        } else {
+            currentMode = 'game';
+            title.innerText = '当前模式：【游戏挑战】';
+            toggleBtn.innerText = '切换至【推理辅助】';
+            document.getElementById('gameControls').style.display = 'flex';
+            document.getElementById('reasoningControls').style.display = 'none';
+            colorPickersRow.style.display = 'none'; 
+            fastInputContainer.style.display = 'none';
+            initGame();
+        }
+    }
+
+    function autoFill(strCode) {
+        document.getElementById('fastInput').value = strCode;
+        handleFastInput({target: {value: strCode}});
+    }
+
+    function handleFastInput(e) {
+        let val = e.target.value.replace(/\D/g, '');
+        e.target.value = val;
+        for(let i=0; i<4; i++) {
+            currentGuess[i] = val[i] !== undefined ? parseInt(val[i]) : 0;
+        }
+        updateDialsUI(); 
+    }
+
+    function changeDigit(index, delta) {
+        if (currentMode === 'game' && isGameOver) return;
+        
+        let oldDigit = currentGuess[index];
+        let newDigit = (oldDigit + delta + 10) % 10;
+        currentGuess[index] = newDigit;
+        
+        const strip = document.getElementById(`strip-${index}`);
+        const targetY = delta < 0 ? -80 : 0;
+
+        strip.style.transition = 'transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94)'; 
+        strip.style.transform = `translateY(${targetY}px)`;
+        
+        setTimeout(() => {
+            updateDialsUI();
+        }, 150);
+
+        if (currentMode === 'reasoning') {
+            document.getElementById('fastInput').value = currentGuess.join('');
+        }
+    }
+
+    function cycleColor(index) {
+        if (currentMode !== 'reasoning') return;
+        let currentColorIndex = colorCycle.indexOf(inputColors[index]);
+        let nextColorIndex = (currentColorIndex + 1) % colorCycle.length;
+        inputColors[index] = colorCycle[nextColorIndex];
+        document.getElementById(`color-${index}`).innerText = inputColors[index];
+    }
+
+    function updateDialsUI() {
+        for (let i = 0; i < 4; i++) {
+            let val = currentGuess[i];
+            const strip = document.getElementById(`strip-${i}`);
+            
+            strip.style.transition = 'none';
+            strip.style.transform = `translateY(-40px)`;
+
+            document.getElementById(`strip-${i}-2`).innerText = (val + 2) % 10;
+            document.getElementById(`strip-${i}-1`).innerText = (val + 1) % 10;
+            document.getElementById(`strip-${i}-0`).innerText = val;           
+            document.getElementById(`strip-${i}--1`).innerText = (val + 9) % 10; 
+            document.getElementById(`strip-${i}--2`).innerText = (val + 8) % 10; 
+        }
+    }
+
+    function renderHistoryItemToDOM(guessArr, feedbackArr) {
+        const historyList = document.getElementById('historyList');
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'history-item';
+
+        const feedbackDiv = document.createElement('div');
+        feedbackDiv.className = 'history-feedback';
+        feedbackArr.forEach(f => {
+            const span = document.createElement('span');
+            span.innerText = f;
+            feedbackDiv.appendChild(span);
+        });
+
+        const numbersDiv = document.createElement('div');
+        numbersDiv.className = 'history-numbers';
+        guessArr.forEach(n => {
+            const span = document.createElement('span');
+            span.innerText = n;
+            numbersDiv.appendChild(span);
+        });
+
+        itemDiv.appendChild(feedbackDiv);
+        itemDiv.appendChild(numbersDiv);
+        historyList.appendChild(itemDiv);
+        historyList.scrollTop = historyList.scrollHeight;
+    }
+
+    function initGame() {
+        secretCode = Array.from({length: 4}, () => Math.floor(Math.random() * 10));
+        currentGuess = [0, 0, 0, 0];
+        attemptsLeft = MAX_ATTEMPTS;
+        isGameOver = false;
+
+        updateDialsUI();
+        document.getElementById('attemptsText').innerText = `尝试次数：${attemptsLeft}`;
+        document.getElementById('historyList').innerHTML = '';
+        let msgBox = document.getElementById('messageBox');
+        msgBox.innerText = `系统重置 (采用规则${currentRule})，请破解密码！`;
+        msgBox.style.color = '#ffcc00';
+        document.getElementById('lockBtn').disabled = false;
+        document.getElementById('restartBtn').style.display = 'none';
+    }
+
+    function submitGuess() {
+        if (isGameOver || attemptsLeft <= 0) return;
+        let guess = [...currentGuess];
+        let fbInt = getFeedbackFast(secretCode, guess);
+        let feedbackColors = intToColors(fbInt);
+
+        renderHistoryItemToDOM(guess, feedbackColors);
+        attemptsLeft--;
+        document.getElementById('attemptsText').innerText = `尝试次数：${attemptsLeft}`;
+
+        if (fbInt === 80) { 
+            isGameOver = true;
+            document.getElementById('lockBtn').disabled = true;
+            document.getElementById('restartBtn').style.display = 'inline-block';
+            let msgBox = document.getElementById('messageBox');
+            msgBox.style.color = '#00ff00';
+            msgBox.innerText = '破解成功！保险柜已开启！';
+        } else if (attemptsLeft <= 0) {
+            isGameOver = true;
+            document.getElementById('lockBtn').disabled = true;
+            document.getElementById('restartBtn').style.display = 'inline-block';
+            let msgBox = document.getElementById('messageBox');
+            msgBox.style.color = '#ff3333';
+            msgBox.innerText = `破解失败！正确密码是: ${secretCode.join('')}`;
+        }
+    }
+
+    function initReasoningMode() {
+        currentValidCodes = [...allPossibleCodes];
+        reasoningHistory = []; 
+        currentGuess = [0, 0, 0, 0];
+        inputColors = ['🟥', '🟥', '🟥', '🟥'];
+        
+        updateDialsUI();
+        document.getElementById('fastInput').value = '0000';
+        for(let i=0; i<4; i++) {
+            document.getElementById(`color-${i}`).innerText = inputColors[i];
+        }
+        document.getElementById('historyList').innerHTML = '';
+        document.getElementById('reasoningLog').innerHTML = `
+            核心计算模块已重置。<br>
+            当前可能组合：<strong class="highlight">10000</strong> 种。<br>
+            👉 建议初始尝试：<strong style="cursor:pointer;" title="点击输入" onclick="autoFill('0123')">0123</strong> 或 <strong style="cursor:pointer;" title="点击输入" onclick="autoFill('0987')">0987</strong>
+        `;
+    }
+
+    function addReasoningRecord() {
+        let guess = [...currentGuess];
+        let colors = [...inputColors];
+        
+        reasoningHistory.push({ guess: guess, colors: colors });
+        renderHistoryItemToDOM(guess, colors);
+
+        let targetFbInt = colorsToInt(colors);
+        currentValidCodes = currentValidCodes.filter(code => {
+            return getFeedbackFast(code, guess) === targetFbInt;
+        });
+
+        updateReasoningLog(`✅ 录入: ${guess.join('')} (${colors.join('')})`);
+        resetInputArea();
+    }
+
+    function undoReasoningRecord() {
+        if (reasoningHistory.length === 0) return;
+
+        reasoningHistory.pop();
+        currentValidCodes = [...allPossibleCodes];
+        
+        for (let record of reasoningHistory) {
+            let targetFbInt = colorsToInt(record.colors);
+            currentValidCodes = currentValidCodes.filter(code => {
+                return getFeedbackFast(code, record.guess) === targetFbInt;
+            });
+        }
+
+        document.getElementById('historyList').innerHTML = '';
+        for (let record of reasoningHistory) {
+            renderHistoryItemToDOM(record.guess, record.colors);
+        }
+
+        if (reasoningHistory.length === 0) {
+            document.getElementById('reasoningLog').innerHTML = `
+                ↩️ 已撤回所有操作，回退至初始状态。<br>
+                当前可能组合：<strong class="highlight">10000</strong> 种。<br>
+                👉 建议初始尝试：<strong style="cursor:pointer;" title="点击输入" onclick="autoFill('0123')">0123</strong> 或 <strong style="cursor:pointer;" title="点击输入" onclick="autoFill('0987')">0987</strong>
+            `;
+        } else {
+            updateReasoningLog(`↩️ 已成功撤回上一步。`);
+        }
+        
+        resetInputArea();
+    }
+
+    function updateReasoningLog(actionMessage) {
+        let logDiv = document.getElementById('reasoningLog');
+        let report = `${actionMessage}<br>`;
+        report += `🔍 当前剩余可能： <strong class="highlight">${currentValidCodes.length}</strong> 种。<br><br>`;
+
+        if (currentValidCodes.length === 0) {
+            report += `<span style="color:#ff3333;">⚠️ 出现矛盾！未找到符合当前规则 (${currentRule}) 的密码，请检查是否选错了规则或录错了颜色。</span>`;
+        } else if (currentValidCodes.length === 1) {
+            report += `🎯 <strong style="color:#00ff00; font-size:1.2rem;">锁定目标！</strong><br>唯一可能: <strong style="color:#00ff00; font-size:1.8rem; cursor:pointer;" onclick="autoFill('${currentValidCodes[0].join('')}')">${currentValidCodes[0].join('')}</strong>`;
+        } else {
+            // 【核心修正】根据录入次数动态提供试探建议，绝不过早要求盲狙
+            if (reasoningHistory.length < 3) {
+                // 只要还没到最后一步，一定要调用 Minimax 给出试探策略
+                let rec = calculateMinimax(currentValidCodes);
+                report += `<span class="minimax-tag">⚙️ Minimax 战术推荐 (用于排除错误)：</span><br>`;
+                report += `💡 最佳试探: <strong style="font-size:1.8rem; cursor:pointer;" title="点击一键填入" onclick="autoFill('${rec.code.join('')}')">${rec.code.join('')}</strong><br>`;
+                report += `<small style="color:#888;">(此组数字能将最坏情况压缩至 <strong style="color:#ff6600">${rec.maxRemaining}</strong> 种以内，确保最后一步胜率)</small><br><br>`;
+            } else {
+                // 第3步已经录完，只剩最后1次尝试了，没办法再试探了
+                report += `<span class="minimax-tag" style="color:#ff3333;">⚠️ 最终决战：无试探机会，必须盲狙！</span><br>`;
+            }
+
+            // 【补充展现】如果剩余数字不太多，同时也列出名单，让玩家自由选择是否赌运气
+            if (currentValidCodes.length <= 20) {
+                report += `<span style="color:#a8b2d1;">🎯 当前候选名单 (点击数字可直接盲猜)：</span><br>`;
+                report += `<div class="badge-container">`;
+                for(let i = 0; i < currentValidCodes.length; i++) {
+                    let strCode = currentValidCodes[i].join('');
+                    report += `<span class="code-badge" onclick="autoFill('${strCode}')">${strCode}</span>`;
+                }
+                report += `</div>`;
+            } else if (reasoningHistory.length >= 3) {
+                // 已经到最后一步了，虽然名单很长，但也必须列出来盲选
+                report += `<span style="color:#a8b2d1;">🎯 候选名单过长，前200项如下：</span><br>`;
+                report += `<div class="badge-container">`;
+                let displayLimit = Math.min(currentValidCodes.length, 200); 
+                for(let i = 0; i < displayLimit; i++) {
+                    let strCode = currentValidCodes[i].join('');
+                    report += `<span class="code-badge" onclick="autoFill('${strCode}')">${strCode}</span>`;
+                }
+                report += `</div>`;
+            }
+        }
+
+        logDiv.innerHTML = report;
+    }
+
+    function resetInputArea() {
+        inputColors = ['🟥', '🟥', '🟥', '🟥'];
+        for(let i=0; i<4; i++) {
+            document.getElementById(`color-${i}`).innerText = inputColors[i];
+        }
+        const fastInput = document.getElementById('fastInput');
+        fastInput.value = ''; 
+        fastInput.focus(); 
+    }
+</script>
+
+</body>
+</html>
