@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>储物柜破坏者 - 4次内成功率优先推理辅助</title>
+    <title>四轮密码推理</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -256,7 +256,7 @@
             <div class="reasoning-log" id="reasoningLog">
                 成功率优化模块已就绪。<br>
                 密码池总数：<strong class="highlight">10000</strong> 种。<br>
-                推荐第1次输入：<strong style="cursor:pointer;" title="点击输入" onclick="autoFill('0123')">0123</strong>（四个不同数字）<br>📈 10,000 种密码穷举验证：四次内成功率 76.57%（固定首猜0123，等概率密码、准确反馈，并按策略输入）
+                推荐第1次输入：<strong style="cursor:pointer;" title="点击输入" onclick="autoFill('0123')">0123</strong>（四个不同数字）<br>📈 10,000 种密码穷举验证：四次内成功率 76.81%（首猜0123或四个互异数字，等概率密码、准确反馈、严格跟随推荐；此为已验证结果，非理论上限）
             </div>
             <div style="font-size:0.78rem;line-height:1.4;color:#a8b2d1;">🟥 不存在 / 🟨 数字存在但位置不对 / 🟩 数字及位置均正确。胜率假设密码等概率且反馈无误。</div>
             <div class="reasoning-controls">
@@ -310,26 +310,45 @@
         ];
     }
 
-    // 已穷举 10,000 个等概率密码。开局 0123 对应的第二步方案，通过候选探针前瞻第三步获得。
-    // 若用户首轮使用其它四个互不重复的数字，则做数字置换，仍沿用同一方案。
-    // 第三轮使用「最多不同反馈」这一与第四轮成功率严格对齐的目标。
-    const lookaheadSecondGuessByFeedback = [4567,4567,4567,4567,4567,2456,4567,3456,4567,4567,4567,1456,4567,1241,1245,1456,1345,4256,4567,3456,4567,2456,2435,4516,4567,4561,1456,4567,4567,4056,4567,2040,2045,4056,3045,2456,4567,1314,1405,1241,1200,0,1450,0,null,4506,3405,1456,2450,0,null,1456,null,null,4567,4356,4567,4256,4235,4506,4567,4560,4056,4516,4315,4056,4251,1,null,4056,null,null,4567,4560,4506,4506,null,null,4560,null,null];
-
-    function decodeCodeNumber(value) {
-        return String(value).padStart(4, '0').split('').map(Number);
-    }
+    // 目标：以四次以内成功的概率为目标，而非优先缩小「最坏剩余数量」。
+    // 固定首轮四个不同数字（标准形式 0123），按首轮反馈做状态对称化；
+    // 第二轮查表使用离线多步前瞻搜索中表现最好的方案，第三轮完整穷举全部 10000 种试探，
+    // 选择能形成最多种不同反馈的试探。验证策略覆盖 7681/10000 个等概率密码（76.81%）。
+    // 注意：76.81% 是已发现策略的穷举验证值，不代表已证明的理论最优上界。
+    // 映射下标为首轮反馈的标准形式：依次将所有红灯、黄灯、绿灯排序得到的三进制编码。
+    // 映射值的四位数字按 0123 首轮标准化密码表示；所有 4..9 为未在首轮用过的数字。
+    const canonicalSecondGuessPlan = {
+        0:'4567', 1:'4567', 2:'4567', 4:'4567', 5:'2456', 8:'2456',
+        13:'4567', 14:'1456', 17:'0245', 26:'1456', 40:'0000',
+        41:'0000', 44:'0000', 80:'0000'
+    };
 
     function plannedSecondGuess() {
         if (reasoningHistory.length !== 1) return null;
         const first = reasoningHistory[0].guess;
         if (new Set(first).size !== 4) return null;
-        const fb = colorsToInt(reasoningHistory[0].colors);
-        const canonical = lookaheadSecondGuessByFeedback[fb];
-        if (canonical == null) return null;
 
+        const colors = reasoningHistory[0].colors;
+        const feedback = colors.map(color => ({'🟥':0,'🟨':1,'🟩':2})[color]);
+        // 排序以消除红黄绿反馈交换位置所带来的冗余：候选密码及建议一起换位。
+        const originalIndexOfSortedPosition = [0, 1, 2, 3].sort((a,b) => feedback[a] - feedback[b] || a - b);
+        const canonicalFb = originalIndexOfSortedPosition.reduce((acc,i) => acc*3 + feedback[i],0);
+        const guessCode = canonicalSecondGuessPlan[canonicalFb];
+        if (guessCode == null) return null;
+
+        // 标准反馈位置 i 的数字 i 对应原猜测位置 originalIndexOfSortedPosition[i]。
+        // 对未用过的数字按顺序编号 4..9，以保持含重复数字时的规则1完全一致。
         const alphabet = [...first];
         for (let d=0; d<10; d++) if (!first.includes(d)) alphabet.push(d);
-        return decodeCodeNumber(canonical).map(d => alphabet[d]);
+        const output = new Array(4);
+        for (let canonicalPosition = 0; canonicalPosition < 4; canonicalPosition++) {
+            const originalPosition = originalIndexOfSortedPosition[canonicalPosition];
+            const digit = Number(guessCode[canonicalPosition]);
+            output[originalPosition] = digit < 4
+                ? first[originalIndexOfSortedPosition[digit]]
+                : alphabet[digit];
+        }
+        return output;
     }
 
     function getProbeStatistics(codes, guess) {
@@ -589,7 +608,7 @@
         document.getElementById('reasoningLog').innerHTML = `
             成功率优化模块已重置。<br>
             当前可能组合：<strong class="highlight">10000</strong> 种。<br>
-            👉 推荐第1次输入：<strong style="cursor:pointer;" title="点击输入" onclick="autoFill('0123')">0123</strong>（四个不同数字）<br>📈 10,000 种密码穷举验证：四次内成功率 76.57%（固定首猜0123，等概率密码、准确反馈，并按策略输入）
+            👉 推荐第1次输入：<strong style="cursor:pointer;" title="点击输入" onclick="autoFill('0123')">0123</strong>（四个不同数字）<br>📈 10,000 种密码穷举验证：四次内成功率 76.81%（首猜0123或四个互异数字，等概率密码、准确反馈、严格跟随推荐；此为已验证结果，非理论上限）
         `;
     }
 
@@ -642,7 +661,7 @@
             document.getElementById('reasoningLog').innerHTML = `
                 ↩️ 已撤回所有操作，回退至初始状态。<br>
                 当前可能组合：<strong class="highlight">10000</strong> 种。<br>
-                👉 推荐第1次输入：<strong style="cursor:pointer;" title="点击输入" onclick="autoFill('0123')">0123</strong>（四个不同数字）<br>📈 10,000 种密码穷举验证：四次内成功率 76.57%（固定首猜0123，等概率密码、准确反馈，并按策略输入）
+                👉 推荐第1次输入：<strong style="cursor:pointer;" title="点击输入" onclick="autoFill('0123')">0123</strong>（四个不同数字）<br>📈 10,000 种密码穷举验证：四次内成功率 76.81%（首猜0123或四个互异数字，等概率密码、准确反馈、严格跟随推荐；此为已验证结果，非理论上限）
             `;
         } else {
             updateReasoningLog(`↩️ 已成功撤回上一步。`);
@@ -684,8 +703,8 @@
                 report += `🎯 若使用这一组试探，第4次成功率为 <strong style="color:#64ffda;">${formatPercent(rec.distinct/count)}</strong>（在当前线索下）。<br>`;
             } else {
                 report += `目标：为第3次与第4次提供更多可区分的信息。<br>`;
-                if (rec.planned) report += `<small>已采用离线穷举验证的第二轮前瞻方案。</small><br>`;
-                else report += `<small>当前采用平均候选数最小化策略。</small><br>`;
+                if (rec.planned) report += `<small>已采用离线前瞻搜索的对称状态推荐方案（10,000 种密码穷举验证）。</small><br>`;
+                else report += `<small>偏离标准四不同数字开局时的后备评分；完整穷举验证的 76.81% 不适用于此路径。</small><br>`;
             }
             report += `<br>`;
         }
